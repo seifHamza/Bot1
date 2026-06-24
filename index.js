@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, PermissionsBitField, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, ChannelType } = require('discord.js');
 
 const client = new Client({
     intents: [
@@ -9,6 +9,9 @@ const client = new Client({
         GatewayIntentBits.MessageContent
     ]
 });
+
+// --- ضع الـ ID الخاص بك هنا ---
+const OWNER_ID = '1452991268635410585'; 
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
@@ -32,16 +35,16 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 (async () => {
     try {
         await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-        console.log('✅ Successfully registered slash commands.');
+        console.log('✅ Commands registered successfully.');
     } catch (e) { console.error('Registration Error:', e); }
 })();
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    // Admin permission check
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+    // التحقق: هل المستخدم هو أنت؟
+    if (interaction.user.id !== OWNER_ID) {
+        return interaction.reply({ content: '❌ Only the owner can use this command.', ephemeral: true });
     }
 
     if (interaction.commandName === 'org') {
@@ -51,7 +54,7 @@ client.on('interactionCreate', async interaction => {
             const type = interaction.options.getString('type') === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
             
             const channel = await interaction.guild.channels.create({ name, type });
-            await interaction.reply(`✅ Channel **#${channel.name}** has been created successfully! ✨`);
+            await interaction.reply(`✅ Channel **#${channel.name}** has been created! ✨`);
         }
     }
 
@@ -75,7 +78,7 @@ client.on('interactionCreate', async interaction => {
                 await interaction.guild.members.unban(user.id);
                 await m.reply(`✅ Successfully unbanned **${user.tag}**! 🔓`);
             } else {
-                m.reply("⚠️ Invalid number, operation cancelled.");
+                m.reply("⚠️ Invalid number.");
             }
         });
     }
