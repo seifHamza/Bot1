@@ -15,9 +15,7 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// --- نظام الإسبام المطور ---
-const messageCounts = new Map();
-
+// --- نظام الإسبام المطور (يحذف الرسائل واحدة بواحدة لضمان المسح) ---
 client.on('messageCreate', async message => {
     if (message.author.bot || message.author.id === OWNER_ID) return;
 
@@ -33,6 +31,29 @@ client.on('messageCreate', async message => {
     messageCounts.set(message.author.id, userData);
 
     if (userData.count > 5) {
+        // 1. جلب آخر 100 رسالة في القناة
+        const messages = await message.channel.messages.fetch({ limit: 100 });
+        // 2. تصفية رسائل المستخدم المزعج فقط
+        const userMessages = messages.filter(m => m.author.id === message.author.id);
+        
+        // 3. مسح كل رسالة بشكل فردي (هذا الحل يضمن المسح)
+        for (const [id, msg] of userMessages) {
+            try {
+                await msg.delete();
+            } catch (err) {
+                console.error("Could not delete message ID:", id);
+            }
+        }
+
+        // 4. إرسال تنبيه خاص لك (Private DM)
+        try {
+            const owner = await client.users.fetch(OWNER_ID);
+            await owner.send(`⚠️ **Spam Alert!**\nUser: **${message.author.tag}**\nChannel: **#${message.channel.name}**\nAction: I deleted all their recent messages.`);
+        } catch (err) { console.error("Could not send DM to owner."); }
+
+        messageCounts.delete(message.author.id);
+    }
+});
         // 1. مسح جميع رسائل المستخدم المزعجة في القناة
         const messages = await message.channel.messages.fetch({ limit: 100 });
         const userMessages = messages.filter(m => m.author.id === message.author.id);
