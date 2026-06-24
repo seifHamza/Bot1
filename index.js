@@ -113,6 +113,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'banlist') {
+        if (!interaction.guild) return interaction.reply({ content: '❌ This command can only be used in a server.', ephemeral: true });
         const bans = await interaction.guild.bans.fetch();
         if (bans.size === 0) return interaction.reply("🚫 No bans.");
         const banList = Array.from(bans.values());
