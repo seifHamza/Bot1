@@ -74,4 +74,20 @@ client.on('ready', () => {
     console.log(`✅ Logged in as ${client.user.tag}!`);
 });
 
+client.on('error', error => {
+    console.error('❌ Discord client error:', error);
+});
+
+client.on('warn', info => {
+    console.warn('⚠️ Discord client warning:', info);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled promise rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', error => {
+    console.error('❌ Uncaught exception:', error);
+});
+
 client.login(TOKEN);
