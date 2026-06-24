@@ -20,29 +20,37 @@ const GUILD_ID = process.env.GUILD_ID;
 const messageCounts = new Map();
 
 client.on('messageCreate', async message => {
-    if (message.author.bot) return;
+    if (message.author.bot || message.author.id === OWNER_ID) return;
 
     const now = Date.now();
-    const userSpamData = messageCounts.get(message.author.id) || { count: 0, lastMessage: now };
+    const userData = messageCounts.get(message.author.id) || { count: 0, lastMessage: now, spamWarnings: 0 };
 
-    if (now - userSpamData.lastMessage < 3000) {
-        userSpamData.count++;
+    if (now - userData.lastMessage < 3000) {
+        userData.count++;
     } else {
-        userSpamData.count = 1;
+        userData.count = 1;
     }
-    userSpamData.lastMessage = now;
-    messageCounts.set(message.author.id, userSpamData);
+    userData.lastMessage = now;
 
-    if (userSpamData.count > 5) {
-        // إرسال تنبيه في الخاص لك
-        try {
-            const owner = await client.users.fetch(OWNER_ID);
-            await owner.send(`⚠️ Alert: User **${message.author.tag}** is spamming in channel **#${message.channel.name}**!`);
-        } catch (err) { console.error("Could not send DM to owner."); }
+    if (userData.count > 5) {
+        userData.spamWarnings++;
+        messageCounts.set(message.author.id, userData);
 
-        // تنبيه المستخدم في القناة
-        await message.channel.send(`🚫 **${message.author.username}**, please stop spamming!`);
-        messageCounts.delete(message.author.id);
+        if (userData.spamWarnings >= 2) {
+            // المحاولة الثانية: عمل بان
+            try {
+                await message.guild.members.ban(message.author.id, { reason: 'Repeated spamming' });
+                await message.channel.send(`🚫 **${message.author.username}** has been banned for repeated spamming!`);
+            } catch (err) {
+                // إذا فشل البان: رسالة باسمك
+                await message.channel.send(`⚠️ **${message.author.username}** is spamming, but I can't ban them. Please handle this, Saif!`);
+            }
+        } else {
+            // المحاولة الأولى: تحذير
+            await message.channel.send(`🚫 **${message.author.username}**, please stop spamming! This is your first warning.`);
+        }
+    } else {
+        messageCounts.set(message.author.id, userData);
     }
 });
 
