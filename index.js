@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, ChannelType, PermissionsBitField } = require('discord.js');
 
 const client = new Client({
     intents: [
@@ -18,9 +18,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 const commands = [
-    new SlashCommandBuilder()
-        .setName('banlist')
-        .setDescription('View the list of banned users and unban them'),
+    new SlashCommandBuilder().setName('banlist').setDescription('View banned users and unban them'),
     new SlashCommandBuilder()
         .setName('org')
         .setDescription('Manage your server')
@@ -30,9 +28,13 @@ const commands = [
                 .addChoices({name: 'Text', value: 'text'}, {name: 'Voice', value: 'voice'}))),
     new SlashCommandBuilder()
         .setName('send')
-        .setDescription('Send a private message (DM) to a user')
+        .setDescription('Send a private message to a user')
         .addStringOption(option => option.setName('userid').setDescription('Target User ID').setRequired(true))
         .addStringOption(option => option.setName('message').setDescription('The message content').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('clear')
+        .setDescription('Delete a specific number of messages')
+        .addIntegerOption(option => option.setName('amount').setDescription('Number of messages to delete (1-99)').setRequired(true)),
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -47,40 +49,50 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    // التحقق: هل المستخدم هو أنت؟
+    // التحقق من أن المستخدم هو صاحب البوت
     if (interaction.user.id !== OWNER_ID) {
         return interaction.reply({ content: '❌ Only the owner can use this command.', ephemeral: true });
     }
 
-    // أمر الـ send
-    if (interaction.commandName === 'send') {
-        const userId = interaction.options.getString('userid');
-        const messageContent = interaction.options.getString('message');
+    // أمر الـ Clear
+    if (interaction.commandName === 'clear') {
+        const amount = interaction.options.getInteger('amount');
+        if (amount < 1 || amount > 99) return interaction.reply({ content: '⚠️ Please provide a number between 1 and 99.', ephemeral: true });
 
         try {
-            const user = await client.users.fetch(userId);
-            await user.send(messageContent);
-            await interaction.reply({ content: `✅ Message sent successfully to **${user.tag}**!`, ephemeral: true });
+            const messages = await interaction.channel.bulkDelete(amount, true);
+            await interaction.reply({ content: `✅ Deleted **${messages.size}** messages! 🧹`, ephemeral: true });
         } catch (error) {
-            await interaction.reply({ content: `❌ Could not send message. The user might have DMs blocked.`, ephemeral: true });
+            await interaction.reply({ content: '❌ Could not delete messages.', ephemeral: true });
         }
     }
 
-    // أمر الـ org
+    // باقي الأوامر (org, send, banlist) كما هي
+    if (interaction.commandName === 'send') {
+        const userId = interaction.options.getString('userid');
+        const messageContent = interaction.options.getString('message');
+        try {
+            const user = await client.users.fetch(userId);
+            await user.send(messageContent);
+            await interaction.reply({ content: `✅ Message sent to **${user.tag}**!`, ephemeral: true });
+        } catch (error) {
+            await interaction.reply({ content: `❌ Could not send DM.`, ephemeral: true });
+        }
+    }
+
     if (interaction.commandName === 'org') {
         const subCommand = interaction.options.getSubcommand();
         if (subCommand === 'create_channel') {
             const name = interaction.options.getString('name');
             const type = interaction.options.getString('type') === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
             const channel = await interaction.guild.channels.create({ name, type });
-            await interaction.reply(`✅ Channel **#${channel.name}** has been created! ✨`);
+            await interaction.reply(`✅ Channel **#${channel.name}** created! ✨`);
         }
     }
 
-    // أمر الـ banlist
     if (interaction.commandName === 'banlist') {
         const bans = await interaction.guild.bans.fetch();
-        if (bans.size === 0) return interaction.reply("🚫 There are no banned users.");
+        if (bans.size === 0) return interaction.reply("🚫 No banned users.");
         const banList = Array.from(bans.values());
         let response = "📜 **Banned Users:**\n" + banList.map((b, i) => `${i + 1}- ${b.user.tag}`).join('\n');
         response += "\n\n**Reply with the number to unban:**";
