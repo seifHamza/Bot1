@@ -10,20 +10,19 @@ const client = new Client({
     ]
 });
 
-// --- إعدادات أساسية ---
-const OWNER_ID = '1452991268635410585'; // ضع الـ ID الخاص بك هنا
+const OWNER_ID = '1452991268635410585'; 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// --- نظام كشف الإسبام ---
+// --- نظام الإسبام المطور ---
 const messageCounts = new Map();
 
 client.on('messageCreate', async message => {
     if (message.author.bot || message.author.id === OWNER_ID) return;
 
     const now = Date.now();
-    const userData = messageCounts.get(message.author.id) || { count: 0, lastMessage: now, spamWarnings: 0 };
+    const userData = messageCounts.get(message.author.id) || { count: 0, lastMessage: now };
 
     if (now - userData.lastMessage < 3000) {
         userData.count++;
@@ -31,26 +30,24 @@ client.on('messageCreate', async message => {
         userData.count = 1;
     }
     userData.lastMessage = now;
+    messageCounts.set(message.author.id, userData);
 
     if (userData.count > 5) {
-        userData.spamWarnings++;
-        messageCounts.set(message.author.id, userData);
+        // 1. مسح جميع رسائل المستخدم المزعجة في القناة
+        const messages = await message.channel.messages.fetch({ limit: 100 });
+        const userMessages = messages.filter(m => m.author.id === message.author.id);
+        
+        try {
+            await message.channel.bulkDelete(userMessages, true);
+        } catch (err) { console.error("Could not delete spam messages."); }
 
-        if (userData.spamWarnings >= 2) {
-            // المحاولة الثانية: عمل بان
-            try {
-                await message.guild.members.ban(message.author.id, { reason: 'Repeated spamming' });
-                await message.channel.send(`🚫 **${message.author.username}** has been banned for repeated spamming!`);
-            } catch (err) {
-                // إذا فشل البان: رسالة باسمك
-                await message.channel.send(`⚠️ **${message.author.username}** is spamming, but I can't ban them. Please handle this, Saif!`);
-            }
-        } else {
-            // المحاولة الأولى: تحذير
-            await message.channel.send(`🚫 **${message.author.username}**, please stop spamming! This is your first warning.`);
-        }
-    } else {
-        messageCounts.set(message.author.id, userData);
+        // 2. إرسال تنبيه خاص لك (Private DM)
+        try {
+            const owner = await client.users.fetch(OWNER_ID);
+            await owner.send(`⚠️ **Spam Alert!**\nUser: **${message.author.tag}**\nChannel: **${message.channel.name}**\nAction: I deleted all their messages.`);
+        } catch (err) { console.error("Could not send DM to owner."); }
+
+        messageCounts.delete(message.author.id);
     }
 });
 
@@ -78,7 +75,7 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
-    if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: '❌ Only the owner can use this!', ephemeral: true });
+    if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: '❌ Only owner!', ephemeral: true });
 
     if (interaction.commandName === 'clear') {
         const amount = interaction.options.getInteger('amount');
