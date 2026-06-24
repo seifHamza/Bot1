@@ -13,10 +13,10 @@ const client = new Client({
 });
 
 // 3. قراءة الإعدادات من نظام الاستضافة (Environment Variables)
-// لن نضع التوكن مباشرة في الكود لضمان الأمان
-const TOKEN = MTUxODA0NDE5NzQ1Njk3Mzg2NA.GeCRS2.Quq1RqAE3vzu5eWTFDsvdLjIFeReE33VKGRa6M;
-const CLIENT_ID = 1518044197456973864;
-const GUILD_ID = 1499847134239789177;
+// Set DISCORD_TOKEN, CLIENT_ID, and GUILD_ID as environment variables on the service.
+const TOKEN = process.env.DISCORD_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 // 4. تسجيل الأمر /banlist
 const commands = [
