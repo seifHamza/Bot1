@@ -10,12 +10,15 @@ const client = new Client({
     ]
 });
 
-const OWNER_ID = '1452991268635410585'; 
+// --- إعدادات أساسية ---
+const OWNER_ID = '1452991268635410585'; // استبدل هذا بالـ ID الخاص بك
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// --- نظام الإسبام المطور (يحذف الرسائل واحدة بواحدة لضمان المسح) ---
+// --- نظام الإسبام المطور ---
+const messageCounts = new Map();
+
 client.on('messageCreate', async message => {
     if (message.author.bot || message.author.id === OWNER_ID) return;
 
@@ -36,36 +39,19 @@ client.on('messageCreate', async message => {
         // 2. تصفية رسائل المستخدم المزعج فقط
         const userMessages = messages.filter(m => m.author.id === message.author.id);
         
-        // 3. مسح كل رسالة بشكل فردي (هذا الحل يضمن المسح)
+        // 3. مسح كل رسالة بشكل فردي (هذا يضمن المسح حتى لو كانت الرسائل قديمة)
         for (const [id, msg] of userMessages) {
             try {
                 await msg.delete();
             } catch (err) {
-                console.error("Could not delete message ID:", id);
+                console.error("Could not delete message:", err);
             }
         }
 
         // 4. إرسال تنبيه خاص لك (Private DM)
         try {
             const owner = await client.users.fetch(OWNER_ID);
-            await owner.send(`⚠️ **Spam Alert!**\nUser: **${message.author.tag}**\nChannel: **#${message.channel.name}**\nAction: I deleted all their recent messages.`);
-        } catch (err) { console.error("Could not send DM to owner."); }
-
-        messageCounts.delete(message.author.id);
-    }
-});
-        // 1. مسح جميع رسائل المستخدم المزعجة في القناة
-        const messages = await message.channel.messages.fetch({ limit: 100 });
-        const userMessages = messages.filter(m => m.author.id === message.author.id);
-        
-        try {
-            await message.channel.bulkDelete(userMessages, true);
-        } catch (err) { console.error("Could not delete spam messages."); }
-
-        // 2. إرسال تنبيه خاص لك (Private DM)
-        try {
-            const owner = await client.users.fetch(OWNER_ID);
-            await owner.send(`⚠️ **Spam Alert!**\nUser: **${message.author.tag}**\nChannel: **${message.channel.name}**\nAction: I deleted all their messages.`);
+            await owner.send(`⚠️ **Spam Alert!**\nUser: **${message.author.tag}**\nChannel: **#${message.channel.name}**\nAction: I have deleted all their recent messages.`);
         } catch (err) { console.error("Could not send DM to owner."); }
 
         messageCounts.delete(message.author.id);
