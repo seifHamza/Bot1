@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, PermissionsBitField, ChannelType } = require('discord.js');
 
 const client = new Client({
     intents: [
@@ -17,10 +17,14 @@ const GUILD_ID = process.env.GUILD_ID;
 const commands = [
     new SlashCommandBuilder()
         .setName('banlist')
-        .setDescription('View banned users and unban them'),
+        .setDescription('View the list of banned users and unban them'),
     new SlashCommandBuilder()
         .setName('org')
-        .setDescription('Manage channels and perform administrative tasks'),
+        .setDescription('Manage your server and channels')
+        .addSubcommand(sub => sub.setName('create_channel').setDescription('Create a new channel')
+            .addStringOption(option => option.setName('name').setDescription('Channel name').setRequired(true))
+            .addStringOption(option => option.setName('type').setDescription('Channel type')
+                .addChoices({name: 'Text', value: 'text'}, {name: 'Voice', value: 'voice'}))),
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -28,30 +32,38 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 (async () => {
     try {
         await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-        console.log('✅ Registered commands successfully.');
+        console.log('✅ Successfully registered slash commands.');
     } catch (e) { console.error('Registration Error:', e); }
 })();
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
+    // Admin permission check
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+    }
+
     if (interaction.commandName === 'org') {
-        if (!interaction.member.permissions.has('Administrator')) {
-            return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+        const subCommand = interaction.options.getSubcommand();
+        if (subCommand === 'create_channel') {
+            const name = interaction.options.getString('name');
+            const type = interaction.options.getString('type') === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
+            
+            const channel = await interaction.guild.channels.create({ name, type });
+            await interaction.reply(`✅ Channel **#${channel.name}** has been created successfully! ✨`);
         }
-        return interaction.reply('⚙️ The org command is active.');
     }
 
     if (interaction.commandName === 'banlist') {
         const bans = await interaction.guild.bans.fetch();
-        if (bans.size === 0) return interaction.reply("There are no banned users.");
+        if (bans.size === 0) return interaction.reply("🚫 There are no banned users.");
 
         const banList = Array.from(bans.values());
-        let response = "📜 **Banned Users:**\n";
-        banList.forEach((b, i) => response += `${i + 1}- ${b.user.tag} (ID: ${b.user.id})\n`);
-        response += "\n*Reply with the number to unban.*";
+        let response = "📜 **Banned Users List:**\n" + banList.map((b, i) => `${i + 1}- ${b.user.tag}`).join('\n');
+        response += "\n\n**Reply with the number of the user to unban:**";
 
-        await interaction.reply({ content: response, fetchReply: true });
+        await interaction.reply({ content: response });
 
         const filter = m => m.author.id === interaction.user.id && !isNaN(m.content);
         const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
@@ -61,33 +73,13 @@ client.on('interactionCreate', async interaction => {
             if (index >= 0 && index < banList.length) {
                 const user = banList[index].user;
                 await interaction.guild.members.unban(user.id);
-                await m.reply(`✅ **Successfully unbanned ${user.tag}**`);
-                await interaction.deleteReply().catch(() => {});
+                await m.reply(`✅ Successfully unbanned **${user.tag}**! 🔓`);
             } else {
-                m.reply("Invalid number.");
+                m.reply("⚠️ Invalid number, operation cancelled.");
             }
         });
     }
 });
 
-client.on('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}!`);
-});
-
-client.on('error', error => {
-    console.error('❌ Discord client error:', error);
-});
-
-client.on('warn', info => {
-    console.warn('⚠️ Discord client warning:', info);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ Unhandled promise rejection at:', promise, 'reason:', reason);
-});
-
-process.on('uncaughtException', error => {
-    console.error('❌ Uncaught exception:', error);
-});
-
+client.on('ready', () => console.log(`✅ Bot is online as ${client.user.tag}`));
 client.login(TOKEN);
