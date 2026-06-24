@@ -1,28 +1,26 @@
-// 1. استيراد المكتبات الضرورية
-require('dotenv').config(); 
+require('dotenv').config();
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
 
-// 2. إعداد البوت
-const client = new Client({ 
+const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildModeration, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent 
-    ] 
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
 });
 
-// 3. قراءة الإعدادات من نظام الاستضافة (Environment Variables)
-// Set DISCORD_TOKEN, CLIENT_ID, and GUILD_ID as environment variables on the service.
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 4. تسجيل الأمر /banlist
 const commands = [
     new SlashCommandBuilder()
         .setName('banlist')
         .setDescription('View banned users and unban them'),
+    new SlashCommandBuilder()
+        .setName('org')
+        .setDescription('Manage channels and perform administrative tasks'),
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -30,13 +28,19 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 (async () => {
     try {
         await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-        console.log('✅ Registered /banlist command in your server.');
+        console.log('✅ Registered commands successfully.');
     } catch (e) { console.error('Registration Error:', e); }
 })();
 
-// 5. منطق عمل البوت
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === 'org') {
+        if (!interaction.member.permissions.has('Administrator')) {
+            return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+        }
+        return interaction.reply('⚙️ The org command is active.');
+    }
 
     if (interaction.commandName === 'banlist') {
         const bans = await interaction.guild.bans.fetch();
@@ -59,7 +63,6 @@ client.on('interactionCreate', async interaction => {
                 await interaction.guild.members.unban(user.id);
                 await m.reply(`✅ **Successfully unbanned ${user.tag}**`);
                 await interaction.deleteReply().catch(() => {});
-                await m.delete().catch(() => {});
             } else {
                 m.reply("Invalid number.");
             }
@@ -67,5 +70,8 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// 6. تشغيل البوت
+client.on('ready', () => {
+    console.log(`✅ Logged in as ${client.user.tag}!`);
+});
+
 client.login(TOKEN);
