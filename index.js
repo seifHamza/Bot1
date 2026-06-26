@@ -11,50 +11,36 @@ const client = new Client({
 });
 
 // --- إعدادات أساسية ---
-const OWNER_ID = '1452991268635410585'; // استبدل هذا بالـ ID الخاص بك
+const OWNER_ID = '1452991268635410585';
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// --- نظام الإسبام المطور ---
-const messageCounts = new Map();
+// --- نظام التحذير (بدون مسح رسائل) ---
+const warningCounts = new Map();
 
 client.on('messageCreate', async message => {
+    // تجاهل البوتات وصاحب البوت
     if (message.author.bot || message.author.id === OWNER_ID) return;
 
-    const now = Date.now();
-    const userData = messageCounts.get(message.author.id) || { count: 0, lastMessage: now };
+    // النظام يعمل فقط في الرسائل الخاصة (DM)
+    if (message.channel.type === ChannelType.DM) {
+        const userId = message.author.id;
+        const currentCount = warningCounts.get(userId) || 5; 
 
-    if (now - userData.lastMessage < 3000) {
-        userData.count++;
-    } else {
-        userData.count = 1;
-    }
-    userData.lastMessage = now;
-    messageCounts.set(message.author.id, userData);
+        if (currentCount > 0) {
+            const newCount = currentCount - 1;
+            warningCounts.set(userId, newCount);
 
-    if (userData.count > 5) {
-        // 1. جلب آخر 100 رسالة في القناة
-        const messages = await message.channel.messages.fetch({ limit: 100 });
-        // 2. تصفية رسائل المستخدم المزعج فقط
-        const userMessages = messages.filter(m => m.author.id === message.author.id);
-        
-        // 3. مسح كل رسالة بشكل فردي (هذا يضمن المسح حتى لو كانت الرسائل قديمة)
-        for (const [id, msg] of userMessages) {
-            try {
-                await msg.delete();
-            } catch (err) {
-                console.error("Could not delete message:", err);
+            if (newCount > 0) {
+                await message.channel.send(`⚠️ **Please wait, Seif will answer.**\nYou have **${newCount}** chances left.`);
+            } else {
+                await message.channel.send("🚫 **You have used all your chances.** You are now blocked from messaging this bot.");
             }
+        } else {
+            // البلوك البرمجي: لا يرد البوت على أي رسالة بعد وصول العداد لـ 0
+            return;
         }
-
-        // 4. إرسال تنبيه خاص لك (Private DM)
-        try {
-            const owner = await client.users.fetch(OWNER_ID);
-            await owner.send(`⚠️ **Spam Alert!**\nUser: **${message.author.tag}**\nChannel: **#${message.channel.name}**\nAction: I have deleted all their recent messages.`);
-        } catch (err) { console.error("Could not send DM to owner."); }
-
-        messageCounts.delete(message.author.id);
     }
 });
 
