@@ -6,47 +6,44 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildModeration,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages // مهم جداً لاستقبال رسائل الـ DM
+    ],
+    partials: ['CHANNEL']
 });
 
-// --- إعدادات أساسية ---
 const OWNER_ID = '1452991268635410585';
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// --- نظام التحذير (بدون مسح رسائل) ---
 const warningCounts = new Map();
+const MAX_CHANCES = 5;
 
 client.on('messageCreate', async message => {
-    // تجاهل البوتات وصاحب البوت
     if (message.author.bot || message.author.id === OWNER_ID) return;
 
-    // النظام يعمل فقط في الرسائل الخاصة (DM)
     if (message.channel.type === ChannelType.DM) {
         const userId = message.author.id;
-        const currentCount = warningCounts.get(userId) || 5; 
+        const currentCount = warningCounts.get(userId) || 0;
 
-        if (currentCount > 0) {
-            const newCount = currentCount - 1;
+        if (currentCount < MAX_CHANCES) {
+            const newCount = currentCount + 1;
             warningCounts.set(userId, newCount);
-
-            if (newCount > 0) {
-                await message.channel.send(`⚠️ **Please wait, Seif will answer.**\nYou have **${newCount}** chances left.`);
-            } else {
-                await message.channel.send("🚫 **You have used all your chances.** You are now blocked from messaging this bot.");
-            }
+            
+            const remaining = MAX_CHANCES - newCount;
+            await message.channel.send(`⚠️ **Please wait, Seif will answer.**\nYou have **${remaining}** chances left.`);
         } else {
-            // البلوك البرمجي: لا يرد البوت على أي رسالة بعد وصول العداد لـ 0
+            // البلوك: تجاهل الرسالة تماماً
             return;
         }
     }
 });
 
-// --- الأوامر (Slash Commands) ---
 const commands = [
     new SlashCommandBuilder().setName('banlist').setDescription('View banned users'),
+    new SlashCommandBuilder().setName('resetwarn').setDescription('Reset warnings for a user')
+        .addUserOption(o => o.setName('user').setDescription('The user to reset').setRequired(true)),
     new SlashCommandBuilder().setName('org').setDescription('Manage server')
         .addSubcommand(sub => sub.setName('create_channel').setDescription('Create a new channel')
             .addStringOption(o => o.setName('name').setDescription('Channel name').setRequired(true))
@@ -62,13 +59,20 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 (async () => {
     try {
         await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-        console.log('✅ Commands registered successfully.');
+        console.log('✅ Commands updated.');
     } catch (e) { console.error(e); }
 })();
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: '❌ Only owner!', ephemeral: true });
+
+    // أمر تصفير التحذيرات
+    if (interaction.commandName === 'resetwarn') {
+        const user = interaction.options.getUser('user');
+        warningCounts.set(user.id, 0);
+        await interaction.reply({ content: `✅ Reset warnings for **${user.tag}**`, ephemeral: true });
+    }
 
     if (interaction.commandName === 'clear') {
         const amount = interaction.options.getInteger('amount');
@@ -88,7 +92,7 @@ client.on('interactionCreate', async interaction => {
             const user = await client.users.fetch(interaction.options.getString('userid'));
             await user.send(interaction.options.getString('message'));
             await interaction.reply({ content: `✅ Sent!`, ephemeral: true });
-        } catch (e) { await interaction.reply({ content: `❌ Failed.`, ephemeral: true }); }
+        } catch (e) { await interaction.reply({ content: `❌ Failed to send DM.`, ephemeral: true }); }
     }
 
     if (interaction.commandName === 'org') {
@@ -99,7 +103,6 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'banlist') {
-        if (!interaction.guild) return interaction.reply({ content: '❌ This command can only be used in a server.', ephemeral: true });
         const bans = await interaction.guild.bans.fetch();
         if (bans.size === 0) return interaction.reply("🚫 No bans.");
         const banList = Array.from(bans.values());
