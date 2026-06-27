@@ -1,5 +1,6 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, SlashCommandBuilder, REST, Routes, ChannelType } = require('discord.js');
+const fs = require('fs');
 
 const client = new Client({
     intents: [
@@ -7,22 +8,43 @@ const client = new Client({
         GatewayIntentBits.GuildModeration,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.DirectMessages // مهم جداً لاستقبال رسائل الـ DM
+        GatewayIntentBits.DirectMessages
     ],
-    partials: ['CHANNEL']
+    partials: [Partials.Channel]
 });
 
 const OWNER_ID = '1452991268635410585';
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
+const DB_FILE = './verified_users.json';
 
 const warningCounts = new Map();
 const MAX_CHANCES = 5;
 
+// --- تحميل بيانات المستخدمين الموثقين ---
+let verifiedUsers = new Set();
+if (fs.existsSync(DB_FILE)) {
+    try {
+        const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+        verifiedUsers = new Set(data);
+    } catch (e) { verifiedUsers = new Set(); }
+}
+
+function saveVerified() {
+    fs.writeFileSync(DB_FILE, JSON.stringify(Array.from(verifiedUsers)));
+}
+
 client.on('messageCreate', async message => {
     if (message.author.bot || message.author.id === OWNER_ID) return;
 
+    // 1. التحقق التلقائي (Auto-Verify)
+    if (!verifiedUsers.has(message.author.id)) {
+        verifiedUsers.add(message.author.id);
+        saveVerified();
+    }
+
+    // 2. نظام التحذير في الخاص (DM)
     if (message.channel.type === ChannelType.DM) {
         const userId = message.author.id;
         const currentCount = warningCounts.get(userId) || 0;
@@ -34,12 +56,12 @@ client.on('messageCreate', async message => {
             const remaining = MAX_CHANCES - newCount;
             await message.channel.send(`⚠️ **Please wait, Seif will answer.**\nYou have **${remaining}** chances left.`);
         } else {
-            // البلوك: تجاهل الرسالة تماماً
             return;
         }
     }
 });
 
+// --- الأوامر ---
 const commands = [
     new SlashCommandBuilder().setName('banlist').setDescription('View banned users'),
     new SlashCommandBuilder().setName('resetwarn').setDescription('Reset warnings for a user')
@@ -67,7 +89,6 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: '❌ Only owner!', ephemeral: true });
 
-    // أمر تصفير التحذيرات
     if (interaction.commandName === 'resetwarn') {
         const user = interaction.options.getUser('user');
         warningCounts.set(user.id, 0);
